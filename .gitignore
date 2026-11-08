@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+.env*
+!.env.example
+coverage/
+*.tsbuildinfo
+.DS_Store
+*.mp4
+*.wav
+frames/
