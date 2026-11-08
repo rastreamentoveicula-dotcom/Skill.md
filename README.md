@@ -1,13 +1,13 @@
 # Recriar Motion AI
 
-Plataforma audiovisual em construção. Esta branch contém a fundação Next.js/Supabase, Motion Studio e um módulo Sound FX integrado à busca, pré-escuta por URL assinada, favoritos, administração de catálogo e edição de clipes de áudio na timeline. Recursos remotos exigem as migrations e credenciais Supabase; ainda **não** é um SaaS pronto para produção: render MP4 com mixagem, provedor de IA, Mercado Pago e sincronização OAuth com Google Drive permanecem pendentes.
+Plataforma audiovisual em evolução. Esta branch contém a fundação Next.js/Supabase, o Motion Studio, painel administrativo protegido em `/admin`, módulo Sound FX e exportação de vídeo WebM no navegador com cenas e áudio da timeline. O agente criativo usa Gemini quando `GEMINI_API_KEY` está configurada como segredo do servidor. Recursos remotos dependem de Supabase; render MP4, Mercado Pago e sincronização OAuth com Google Drive permanecem pendentes.
 
 ## Requisitos
 
 - Node.js 20+ e npm.
 - Supabase para autenticação, Postgres e Storage.
-- Worker Node em contêiner com Chromium/Playwright e FFmpeg para render MP4 com áudio; ainda não implementado/validado.
-- Provedor de IA/Mercado Pago apenas quando essas fases forem iniciadas.
+- Gemini opcional para o agente criativo; configurar `GEMINI_API_KEY` como segredo de servidor.
+- Worker Node em contêiner com Chromium/Playwright e FFmpeg continua necessário para exportar MP4; a exportação atual no navegador entrega WebM.
 
 ## Executar localmente
 
@@ -22,11 +22,11 @@ Acesse `http://localhost:3000`. Sem Supabase, o editor oferece modo local e expo
 ## Supabase
 
 1. Crie projetos Supabase separados para desenvolvimento e produção.
-2. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY`. A Service Role é somente de servidor, nunca `NEXT_PUBLIC_*`.
+2. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY`. A Service Role é somente de servidor, nunca `NEXT_PUBLIC_*`. Para o Gemini, adicione opcionalmente `GEMINI_API_KEY` como segredo (e, se necessário, `GEMINI_MODEL`) na Vercel.
 3. Aplique **as duas migrations** em ordem (`supabase/migrations/202611080001_initial_schema.sql` e `202611080002_sound_fx_library.sql`) e valide-as num Supabase de desenvolvimento antes de produção.
 4. Configure `{APP_URL}/auth/callback`, email e URLs de recuperação.
 5. A primeira migration cria o bucket privado `motion-media`; a integração Sound FX usa URLs temporárias de upload/reprodução emitidas apenas por rotas de servidor. Restrições de armazenamento e MIME devem ser revisadas no Dashboard.
-6. Atribua papel `admin` por processo confiável; não aceite papel definido em metadata controlável pelo cliente. A administração fica em `/admin/sound-fx`.
+6. Atribua papel `admin` por processo confiável; não aceite papel definido em metadata controlável pelo cliente. O painel autenticado fica em `/admin`; o catálogo Sound FX está em `/admin/sound-fx`.
 
 ### Sound FX
 
