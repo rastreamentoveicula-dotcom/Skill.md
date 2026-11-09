@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Gerar chave mestra localmente</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#111116;color:#eeeaf3}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:18px}.card{width:min(560px,100%);padding:24px;border:1px solid #393540;border-radius:12px;background:#1a191f;box-shadow:0 18px 70px #0007}h1{font-size:clamp(22px,6vw,30px);margin:0 0 10px;letter-spacing:-.5px}.lead,.notice{font-size:14px;line-height:1.65;color:#aaa4b1}.notice{margin:18px 0;padding:12px;border:1px solid #675338;border-radius:7px;background:#2a2319;color:#e4c992;font-size:13px}.label{display:block;margin:17px 0 7px;font-size:13px;color:#c9c3cf}input{width:100%;min-height:48px;padding:10px 12px;border:1px solid #48434e;border-radius:6px;background:#111116;color:#e8d9fa;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}button{min-height:44px;padding:0 14px;border:1px solid #795c98;border-radius:6px;background:#654b7f;color:white;font-weight:650;font-size:13px}button.secondary{border-color:#4a4550;background:#25232a}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.status{min-height:23px;margin-top:10px;color:#9bd4aa;font-size:12px}.foot{margin:19px 0 0;color:#8b8492;font-size:11px;line-height:1.6}.foot a{color:#ccb3e4}@media(max-width:430px){.card{padding:19px}.actions button{flex:1}}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Gerar chave de criptografia</h1>
+    <p class="lead">Gere a chave mestra que o app usa para proteger as credenciais de IA e pagamento.</p>
+    <p class="notice"><strong>Guarde uma cópia segura.</strong> Depois de cadastrar credenciais no app, perder esta chave pode torná-las irrecuperáveis. Não envie a chave pelo chat nem compartilhe uma captura de tela.</p>
+    <button id="generate" type="button">Gerar chave segura</button>
+    <label class="label" for="secret">AI_SECRETS_ENCRYPTION_KEY</label>
+    <input id="secret" type="password" readonly autocomplete="off" spellcheck="false" placeholder="Toque em “Gerar chave segura”" aria-label="Chave mestra gerada">
+    <div class="actions"><button id="copy" class="secondary" type="button" disabled>Copiar chave</button><button id="toggle" class="secondary" type="button" disabled>Mostrar</button></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <p class="foot">A chave é criada neste navegador com <code>crypto.getRandomValues</code>. Esta página não envia, salva nem coloca a chave em um endereço web. Copie-a para seu gerenciador de senhas e depois para as variáveis de ambiente do projeto na Vercel.</p>
+  </main>
+  <script>
+    (() => {
+      const output = document.getElementById('secret');
+      const status = document.getElementById('status');
+      const copy = document.getElementById('copy');
+      const toggle = document.getElementById('toggle');
+      document.getElementById('generate').addEventListener('click', () => {
+        if (!window.crypto || !crypto.getRandomValues || !window.isSecureContext) {
+          status.textContent = 'Este navegador não oferece geração segura neste contexto. Use a página HTTPS mais recente.';
+          return;
+        }
+        const bytes = crypto.getRandomValues(new Uint8Array(32));
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        output.value = btoa(binary);
+        output.type = 'password';
+        copy.disabled = false;
+        toggle.disabled = false;
+        toggle.textContent = 'Mostrar';
+        status.textContent = 'Chave criada neste dispositivo. Salve uma cópia segura antes de sair desta página.';
+      });
+      copy.addEventListener('click', async () => {
+        if (!output.value) return;
+        try {
+          await navigator.clipboard.writeText(output.value);
+          status.textContent = 'Copiada. Cole primeiro em seu gerenciador de senhas.';
+        } catch {
+          output.type = 'text';
+          output.focus();
+          output.select();
+          status.textContent = 'Selecione e copie a chave manualmente; depois guarde-a no seu gerenciador de senhas.';
+        }
+      });
+      toggle.addEventListener('click', () => {
+        output.type = output.type === 'password' ? 'text' : 'password';
+        toggle.textContent = output.type === 'password' ? 'Mostrar' : 'Ocultar';
+      });
+    })();
+  </script>
+</body>
+</html>
