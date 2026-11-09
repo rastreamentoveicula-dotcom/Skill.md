@@ -1,21 +1,35 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/require-admin';
-import { createSupabaseAdminClient } from '@/lib/supabase-admin';
-import { decryptSecret, encryptSecret, hasValidEncryptionKey } from '@/lib/secret-vault';
-import { DEFAULT_MODELS, generateWithProvider, type AIProvider } from '@/lib/ai-providers';
+import { AIProviderError, getProviderCatalog } from '@/lib/ai-providers';
+import {
+  CredentialStoreError,
+  auditProviderTest,
+  consumeAdminRateLimit,
+  getSavedProviderCredential,
+  isVaultDatabaseConfigured,
+  listProviderConfigs,
+  listProviderModels,
+  markProviderTestPassed,
+  persistTestedProviderConfig,
+  recordProviderTestFailure,
+  setProviderConfigState,
+  testProviderConnection,
+} from '@/lib/ai-credentials/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
 const providers = ['gemini', 'openai', 'anthropic', 'openrouter'] as const;
-const keyName = (provider: string) => `ai.key.${provider}`;
-const configName = 'ai.provider.config';
-const bodySchema = z.object({
-  action: z.enum(['save', 'test', 'clear']),
-  provider: z.enum(providers),
+const tasks = ['conversation', 'planning', 'script_generation', 'image_analysis', 'video_analysis'] as const;
+const schema = z.object({
+  action: z.enum(['test', 'list_models', 'save_activate', 'disable', 'delete']),
+  provider: z.enum(providers).optional(),
   model: z.string().trim().min(2).max(120).optional(),
-  apiKey: z.string().trim().max(1000).optional(),
-  activate: z.boolean().optional(),
+  task: z.enum(tasks).default('script_generation'),
+  apiKey: z.string().trim().min(1).max(1000).optional(),
+  configId: z.string().uuid().optional(),
+  capabilities: z.object({ text: z.boolean(), image: z.enum(['supported', 'unsupported', 'unknown']), video: z.enum(['supported', 'unsupported', 'unknown']) }).optional(),
 }).strict();
 
 async function authorize() {
@@ -25,69 +39,106 @@ async function authorize() {
   return { user: result.user };
 }
 
+function safeError(error: unknown) {
+  if (error instanceof AIProviderError) return { code: error.code, message: error.message };
+  if (error instanceof CredentialStoreError) return { code: error.code, message: error.message };
+  if (error instanceof Error && error.message === 'VAULT_DATABASE_NOT_CONFIGURED') {
+    return { code: 'vault_not_configured', message: 'Configure SUPABASE_DB_URL como segredo de servidor na Vercel para o acesso privado ao Supabase Vault.' };
+  }
+  if (error instanceof Error && error.message === 'VAULT_SECRET_NOT_FOUND') {
+    return { code: 'vault_secret_not_found', message: 'Credencial não encontrada no Supabase Vault. Cadastre-a novamente.' };
+  }
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = String(error.code);
+    if (code === '42P01' || code === '42703') return { code: 'vault_schema_not_ready', message: 'A migration do módulo de IA ainda não foi aplicada no Supabase. Revise e aplique a migration antes de configurar provedores.' };
+    if (code === '42501') return { code: 'vault_permissions_error', message: 'A conexão privada do servidor não tem as permissões necessárias para ler o Vault.' };
+  }
+  return { code: 'internal_configuration_error', message: 'Falha interna ao acessar a configuração segura de IA.' };
+}
+
 export async function GET() {
   const auth = await authorize();
   if (auth.error) return auth.error;
+  if (!isVaultDatabaseConfigured()) {
+    return NextResponse.json({ vaultReady: false, providers: getProviderCatalog(), configs: [] }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
   try {
-    const admin = createSupabaseAdminClient();
-    const { data, error } = await admin.from('system_settings').select('key,value').in('key', [configName, ...providers.map(keyName)]);
-    if (error) throw error;
-    const settings = new Map((data ?? []).map(row => [row.key, row.value as Record<string, unknown>]));
-    const config = (settings.get(configName) ?? {}) as { activeProvider?: string; models?: Record<string, string> };
-    const keys = Object.fromEntries(providers.map(provider => [provider, Boolean(settings.get(keyName(provider))?.ciphertext)]));
-    const models = { ...DEFAULT_MODELS, ...(config.models ?? {}) };
-    // Gemini 2.5 Flash is no longer a safe default; upgrade old saved UI values.
-    if (models.gemini === 'gemini-2.5-flash') models.gemini = DEFAULT_MODELS.gemini;
-    return NextResponse.json({ activeProvider: providers.includes(config.activeProvider as AIProvider) ? config.activeProvider : 'gemini', models, keys, encryptionReady: hasValidEncryptionKey() }, { headers: { 'Cache-Control': 'private, no-store' } });
-  } catch {
-    return NextResponse.json({ error: 'Não foi possível carregar as configurações de IA. Verifique a chave de criptografia do servidor.' }, { status: 503 });
+    const configs = await listProviderConfigs();
+    return NextResponse.json({ vaultReady: true, providers: getProviderCatalog(), configs }, { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch (error) {
+    const safe = safeError(error);
+    return NextResponse.json({ error: safe.message, code: safe.code }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
   }
 }
 
 export async function POST(request: Request) {
   const auth = await authorize();
   if (auth.error) return auth.error;
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Configuração inválida.' }, { status: 400 });
-  const { action, provider, apiKey } = parsed.data;
+  const input = parsed.data;
+
   try {
-    const admin = createSupabaseAdminClient();
-    const { data: configRow, error: configReadError } = await admin.from('system_settings').select('value').eq('key', configName).maybeSingle();
-    if (configReadError) throw configReadError;
-    const config = (configRow?.value ?? {}) as { activeProvider?: string; models?: Record<string, string> };
-    const model = parsed.data.model?.trim() || config.models?.[provider] || DEFAULT_MODELS[provider];
-    const { data: keyRow, error: keyReadError } = await admin.from('system_settings').select('value').eq('key', keyName(provider)).maybeSingle();
-    if (keyReadError) throw keyReadError;
-    const storedCiphertext = (keyRow?.value as { ciphertext?: string } | null)?.ciphertext;
-
-    if (action === 'clear') {
-      const { error } = await admin.from('system_settings').delete().eq('key', keyName(provider));
-      if (error) throw error;
-      return NextResponse.json({ ok: true, cleared: true });
+    const bucket = input.action === 'test' || input.action === 'list_models' || input.action === 'save_activate' ? 'provider_network' : 'admin_mutation';
+    if (!(await consumeAdminRateLimit(auth.user.id, bucket))) {
+      return NextResponse.json({ error: 'Limite temporário de operações administrativas. Aguarde um minuto e tente novamente.' }, { status: 429, headers: { 'Retry-After': '60', 'Cache-Control': 'private, no-store' } });
+    }
+    if (input.action === 'disable' || input.action === 'delete') {
+      if (!input.configId) return NextResponse.json({ error: 'Selecione uma configuração salva.' }, { status: 400 });
+      const result = await setProviderConfigState({ id: input.configId, actorId: auth.user.id, operation: input.action });
+      return NextResponse.json({ ok: true, ...result });
     }
 
-    if (action === 'test') {
-      const secret = apiKey?.trim() || (storedCiphertext ? decryptSecret(storedCiphertext) : '');
-      if (!secret) return NextResponse.json({ error: `Cadastre a chave de ${provider} antes de testar.` }, { status: 400 });
-      const result = await generateWithProvider({ provider, model, apiKey: secret, system: 'Responda somente com OK.', prompt: 'Teste de conexão. Responda OK.' });
-      return NextResponse.json({ ok: true, message: `Conexão validada com ${provider} (${model}).`, sample: result.text.slice(0, 80) });
+    if (input.action === 'test' || input.action === 'list_models') {
+      const saved = input.apiKey ? null : input.configId ? await getSavedProviderCredential(input.configId) : null;
+      const provider = input.provider ?? saved?.provider;
+      const model = input.model ?? saved?.model;
+      const apiKey = input.apiKey ?? saved?.apiKey;
+      if (saved && input.provider && input.provider !== saved.provider) return NextResponse.json({ error: 'A credencial selecionada pertence a outro provedor.' }, { status: 400 });
+      if (!provider || !apiKey) return NextResponse.json({ error: 'Informe uma chave temporária ou selecione uma credencial salva.' }, { status: 400 });
+      if (input.action === 'list_models') {
+        const models = await listProviderModels(provider, apiKey);
+        return NextResponse.json({ ok: true, models });
+      }
+      if (!model) return NextResponse.json({ error: 'Informe o identificador do modelo.' }, { status: 400 });
+      try {
+        await testProviderConnection({ provider, model, apiKey });
+        if (input.configId && saved) await markProviderTestPassed(input.configId, auth.user.id);
+        else await auditProviderTest({ actorId: auth.user.id, provider, model, task: input.task, success: true });
+        return NextResponse.json({ ok: true, code: 'connected', message: `Conexão validada com ${provider} (${model}).` });
+      } catch (error) {
+        if (provider && model) {
+          const safe = safeError(error);
+          await recordProviderTestFailure({ provider, model, task: saved?.task ?? input.task, code: safe.code, actorId: auth.user.id, ...(saved && !input.apiKey && input.configId ? { configId: input.configId } : {}) }).catch(() => undefined);
+        }
+        throw error;
+      }
     }
 
-    if (apiKey?.trim()) {
-      const ciphertext = encryptSecret(apiKey.trim());
-      const { error } = await admin.from('system_settings').upsert({ key: keyName(provider), value: { ciphertext }, secret: true, updated_by: auth.user.id }, { onConflict: 'key' });
-      if (error) throw error;
+    if (input.action === 'save_activate') {
+      if (!input.provider || !input.model) return NextResponse.json({ error: 'Selecione o provedor e informe um modelo.' }, { status: 400 });
+      const saved = input.apiKey ? null : input.configId ? await getSavedProviderCredential(input.configId) : null;
+      if (saved && saved.provider !== input.provider) return NextResponse.json({ error: 'A credencial selecionada pertence a outro provedor.' }, { status: 400 });
+      const apiKey = input.apiKey ?? saved?.apiKey;
+      if (!apiKey) return NextResponse.json({ error: 'Informe a credencial do provedor.' }, { status: 400 });
+      try {
+        await testProviderConnection({ provider: input.provider, model: input.model, apiKey });
+      } catch (error) {
+        const safe = safeError(error);
+        await recordProviderTestFailure({ provider: input.provider, model: input.model, task: saved?.task ?? input.task, code: safe.code, actorId: auth.user.id, ...(saved && !input.apiKey && input.configId ? { configId: input.configId } : {}) }).catch(() => undefined);
+        throw error;
+      }
+      const config = await persistTestedProviderConfig({
+        provider: input.provider, model: input.model, task: input.task, apiKey, actorId: auth.user.id,
+        makeDefault: true, capabilities: input.capabilities,
+      });
+      return NextResponse.json({ ok: true, message: `${config.displayName} validado, salvo no Vault e ativado para ${config.task}.`, config });
     }
-    if (parsed.data.activate && !apiKey?.trim() && !storedCiphertext) return NextResponse.json({ error: `Cadastre uma chave para ${provider} antes de ativá-lo.` }, { status: 400 });
-    const models = { ...(config.models ?? {}), [provider]: model };
-    const activeProvider = parsed.data.activate ? provider : (config.activeProvider || 'gemini');
-    const { error: configError } = await admin.from('system_settings').upsert({ key: configName, value: { activeProvider, models }, secret: false, updated_by: auth.user.id }, { onConflict: 'key' });
-    if (configError) throw configError;
-    return NextResponse.json({ ok: true, activeProvider, model, keySaved: Boolean(apiKey?.trim()) || Boolean(storedCiphertext) });
+
+    return NextResponse.json({ error: 'Operação não suportada.' }, { status: 400 });
   } catch (error) {
-    const message = error instanceof Error && error.message.includes('AI_SECRETS_ENCRYPTION_KEY')
-      ? 'Configure AI_SECRETS_ENCRYPTION_KEY no servidor antes de gravar chaves.'
-      : error instanceof Error ? error.message : 'Falha ao salvar a configuração.';
-    return NextResponse.json({ error: message }, { status: 503 });
+    const safe = safeError(error);
+    const status = safe.code === 'invalid_credentials' || safe.code === 'model_not_found' || safe.code === 'rate_limit' || safe.code === 'insufficient_balance' || safe.code === 'invalid_request' ? 400 : 503;
+    return NextResponse.json({ error: safe.message, code: safe.code }, { status, headers: { 'Cache-Control': 'private, no-store' } });
   }
 }
