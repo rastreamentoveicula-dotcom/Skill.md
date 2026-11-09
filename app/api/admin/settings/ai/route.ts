@@ -34,7 +34,10 @@ export async function GET() {
     const settings = new Map((data ?? []).map(row => [row.key, row.value as Record<string, unknown>]));
     const config = (settings.get(configName) ?? {}) as { activeProvider?: string; models?: Record<string, string> };
     const keys = Object.fromEntries(providers.map(provider => [provider, Boolean(settings.get(keyName(provider))?.ciphertext)]));
-    return NextResponse.json({ activeProvider: providers.includes(config.activeProvider as AIProvider) ? config.activeProvider : 'gemini', models: { ...DEFAULT_MODELS, ...(config.models ?? {}) }, keys, encryptionReady: hasValidEncryptionKey() }, { headers: { 'Cache-Control': 'private, no-store' } });
+    const models = { ...DEFAULT_MODELS, ...(config.models ?? {}) };
+    // Gemini 2.5 Flash is no longer a safe default; upgrade old saved UI values.
+    if (models.gemini === 'gemini-2.5-flash') models.gemini = DEFAULT_MODELS.gemini;
+    return NextResponse.json({ activeProvider: providers.includes(config.activeProvider as AIProvider) ? config.activeProvider : 'gemini', models, keys, encryptionReady: hasValidEncryptionKey() }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch {
     return NextResponse.json({ error: 'Não foi possível carregar as configurações de IA. Verifique a chave de criptografia do servidor.' }, { status: 503 });
   }
