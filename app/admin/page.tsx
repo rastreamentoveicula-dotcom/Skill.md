@@ -40,6 +40,21 @@ export default async function AdminDashboardPage() {
             <span><strong>Biblioteca Sound FX</strong><small>Importe, revise direitos e gerencie o catálogo de áudio.</small></span>
             <span className="admin-tile-arrow">→</span>
           </Link>
+          <Link className="admin-dashboard-tile" href="/admin/ai">
+            <span className="admin-tile-icon">✦</span>
+            <span><strong>Provedores de IA</strong><small>Cadastre e valide chaves protegidas para o agente.</small></span>
+            <span className="admin-tile-arrow">→</span>
+          </Link>
+          <Link className="admin-dashboard-tile" href="/settings">
+            <span className="admin-tile-icon">◎</span>
+            <span><strong>Minha conta</strong><small>Perfil, email, senha e foto do usuário.</small></span>
+            <span className="admin-tile-arrow">→</span>
+          </Link>
+          <Link className="admin-dashboard-tile" href="/admin/billing">
+            <span className="admin-tile-icon">R$</span>
+            <span><strong>Pagamentos</strong><small>Configuração segura do provedor e status do checkout.</small></span>
+            <span className="admin-tile-arrow">→</span>
+          </Link>
           <Link className="admin-dashboard-tile" href="/studio">
             <span className="admin-tile-icon">▶</span>
             <span><strong>Motion Studio</strong><small>Abra o editor e continue criando projetos.</small></span>
