@@ -3,7 +3,7 @@ import 'server-only';
 export type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'openrouter';
 
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
-  gemini: 'gemini-2.5-flash',
+  gemini: 'gemini-3.8-flash',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-haiku-latest',
   openrouter: 'openai/gpt-4o-mini',
@@ -52,9 +52,15 @@ export async function generateWithProvider(input: {
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error('A chave ou as permissões desse provedor foram recusadas.');
-    if (response.status === 429) throw new Error('O limite de uso do provedor foi atingido.');
-    throw new Error(`O provedor de IA respondeu com HTTP ${response.status}.`);
+    const failure = await response.json().catch(() => null);
+    const providerMessage = typeof failure?.error?.message === 'string'
+      ? (input.apiKey ? failure.error.message.replaceAll(input.apiKey, '[chave ocultada]') : failure.error.message).slice(0, 280)
+      : '';
+    if (response.status === 401 || response.status === 403) throw new Error(providerMessage || 'A chave ou as permissões desse provedor foram recusadas. Confira se a chave pertence ao provedor selecionado.');
+    if (response.status === 429) throw new Error(providerMessage || 'O limite de uso do provedor foi atingido.');
+    if (response.status === 404) throw new Error(providerMessage || `Modelo “${input.model}” não encontrado nesse provedor. Confira o identificador do modelo e tente novamente.`);
+    if (response.status === 400) throw new Error(providerMessage || 'O provedor recusou o pedido. Revise a chave e o identificador do modelo.');
+    throw new Error(providerMessage || `O provedor de IA respondeu com HTTP ${response.status}.`);
   }
   const result = await response.json();
   const text = input.provider === 'gemini'

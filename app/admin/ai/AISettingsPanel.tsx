@@ -5,7 +5,7 @@ import { Check, Eye, EyeOff, LoaderCircle, Save, Trash2, Wifi } from 'lucide-rea
 type Provider = 'gemini' | 'openai' | 'anthropic' | 'openrouter';
 type Settings = { activeProvider: Provider; models: Record<Provider, string>; keys: Record<Provider, boolean>; encryptionReady: boolean };
 const providerNames: Record<Provider, string> = { gemini: 'Google Gemini', openai: 'OpenAI', anthropic: 'Anthropic Claude', openrouter: 'OpenRouter' };
-const defaultModels: Record<Provider, string> = { gemini: 'gemini-2.5-flash', openai: 'gpt-4o-mini', anthropic: 'claude-3-5-haiku-latest', openrouter: 'openai/gpt-4o-mini' };
+const defaultModels: Record<Provider, string> = { gemini: 'gemini-3.8-flash', openai: 'gpt-4o-mini', anthropic: 'claude-3-5-haiku-latest', openrouter: 'openai/gpt-4o-mini' };
 const allProviders = Object.keys(providerNames) as Provider[];
 
 export default function AISettingsPanel() {
