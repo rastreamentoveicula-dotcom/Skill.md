@@ -30,7 +30,8 @@ export async function GET() {
   if (auth.error) return auth.error;
   try {
     const admin = createSupabaseAdminClient();
-    const { data } = await admin.from('system_settings').select('key,value').in('key', [configName, ...providers.map(keyName)]);
+    const { data, error } = await admin.from('system_settings').select('key,value').in('key', [configName, ...providers.map(keyName)]);
+    if (error) throw error;
     const settings = new Map((data ?? []).map(row => [row.key, row.value as Record<string, unknown>]));
     const config = (settings.get(configName) ?? {}) as { activeProvider?: string; models?: Record<string, string> };
     const keys = Object.fromEntries(providers.map(provider => [provider, Boolean(settings.get(keyName(provider))?.ciphertext)]));
@@ -51,14 +52,17 @@ export async function POST(request: Request) {
   const { action, provider, apiKey } = parsed.data;
   try {
     const admin = createSupabaseAdminClient();
-    const { data: configRow } = await admin.from('system_settings').select('value').eq('key', configName).maybeSingle();
+    const { data: configRow, error: configReadError } = await admin.from('system_settings').select('value').eq('key', configName).maybeSingle();
+    if (configReadError) throw configReadError;
     const config = (configRow?.value ?? {}) as { activeProvider?: string; models?: Record<string, string> };
     const model = parsed.data.model?.trim() || config.models?.[provider] || DEFAULT_MODELS[provider];
-    const { data: keyRow } = await admin.from('system_settings').select('value').eq('key', keyName(provider)).maybeSingle();
+    const { data: keyRow, error: keyReadError } = await admin.from('system_settings').select('value').eq('key', keyName(provider)).maybeSingle();
+    if (keyReadError) throw keyReadError;
     const storedCiphertext = (keyRow?.value as { ciphertext?: string } | null)?.ciphertext;
 
     if (action === 'clear') {
-      await admin.from('system_settings').delete().eq('key', keyName(provider));
+      const { error } = await admin.from('system_settings').delete().eq('key', keyName(provider));
+      if (error) throw error;
       return NextResponse.json({ ok: true, cleared: true });
     }
 
