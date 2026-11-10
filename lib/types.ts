@@ -1,4 +1,20 @@
-export type Scene = { id: string; title: string; duration: number; description: string; color: string };
+export type SceneElementAnimation = 'pop' | 'slide-up' | 'float' | 'spin' | 'fade';
+export type SceneElement = {
+  id: string;
+  assetId: string;
+  /** posição relativa 0..1 dentro do canvas (centro do elemento) */
+  x: number;
+  y: number;
+  /** largura do elemento como fração da largura do canvas */
+  scale: number;
+  rotation: number;
+  animation: SceneElementAnimation;
+  /** início em segundos dentro da cena */
+  start: number;
+  /** duração visível em segundos; null = permanece até o fim */
+  duration: number | null;
+};
+export type Scene = { id: string; title: string; duration: number; description: string; color: string; image?: string | null; elements?: SceneElement[] };
 export type Character = { id: string; name: string; role: string; description: string; personality: string; color: string };
 export type StudioProject = { id: string; name: string; aspect: string; scenes: Scene[]; characters: Character[]; updatedAt: string };
 export const starterProject: StudioProject = {

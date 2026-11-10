@@ -11,7 +11,7 @@ async function authenticated() {
 type DbProject={id:string;name:string;aspect_ratio:string;updated_at:string;scenes:{id:string;position:number;title:string;description:string;duration_seconds:number;visual_config:Record<string,unknown>|null}[];characters:{id:string;name:string;role:string;description:string;personality:string;consistency_config:Record<string,unknown>|null}[]};
 function mapProject(row: DbProject) {
   return { id: row.id, name: row.name, aspect: row.aspect_ratio, updatedAt: row.updated_at,
-    scenes: [...(row.scenes ?? [])].sort((a,b)=>a.position-b.position).map(s=>({ id:s.id,title:s.title,description:s.description,duration:Number(s.duration_seconds),color:typeof s.visual_config?.color==='string'?s.visual_config.color:'#6548bb' })),
+    scenes: [...(row.scenes ?? [])].sort((a,b)=>a.position-b.position).map(s=>({ id:s.id,title:s.title,description:s.description,duration:Number(s.duration_seconds),color:typeof s.visual_config?.color==='string'?s.visual_config.color:'#6548bb',image:typeof s.visual_config?.image==='string'?s.visual_config.image:null,elements:Array.isArray(s.visual_config?.elements)?s.visual_config.elements as Record<string,unknown>[]:[] })),
     characters: (row.characters ?? []).map(c=>({id:c.id,name:c.name,role:c.role,description:c.description,personality:c.personality,color:typeof c.consistency_config?.color==='string'?c.consistency_config.color:'#a78bfa'})) };
 }
 export async function GET() {
