@@ -75,6 +75,7 @@ jobs:
     name: smoke de produção
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true # informativo: o deploy pode ainda não ter terminado quando o push dispara o smoke
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - uses: actions/checkout@v4
@@ -84,4 +85,4 @@ jobs:
       - name: Verificar endpoints públicos de produção
         run: node scripts/smoke-production.mjs
         env:
-          SMOKE_BASE_URL: https://motion-system-eta.vercel.app
+          SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL || 'https://motion-system-eta.vercel.app' }}

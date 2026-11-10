@@ -36,7 +36,7 @@ A imagem enviada mostra um editor dark em proporção desktop, com barra superio
 
 **Render**: request autenticado → valida projeto/limites/custo → cria job idempotente e reserva → worker reivindica atomicamente → baixa somente assets autorizados → compõe/encode MP4 → envia saída privada → finaliza ledger/job. URL de saída é assinada após autorização. Timeouts e cancelamento liberam créditos de acordo com estado efetivo.
 
-**Agente**: prompt de sistema derivado da Skill adaptada + contexto mínimo de projeto + conversa → modelo responde texto/plano estruturado → schema valida → mostra resumo/solicita confirmação → backend valida owner, limites e créditos → ferramentas auditáveis alteram projeto. Uploads enviados a modelos só com consentimento e políticas de retenção documentadas.
+**Agente**: prompt de sistema derivado da Skill adaptada (`lib/motion-skill.ts`) + contexto mínimo de projeto + conversa → modelo responde texto/plano estruturado → schema valida → mostra resumo/solicita confirmação → backend valida owner, limites e créditos → ferramentas auditáveis alteram projeto. Uploads enviados a modelos só com consentimento e políticas de retenção documentadas.
 
 ## Esquema inicial
 
@@ -66,7 +66,7 @@ A conexão Google Drive autorizada do agente listou 29 entradas, todas `audio/wa
 
 ## Estado de produto e não implementado
 
-A fundação UI oferece edição de cenas/personagens, preview ilustrativo com controle de tempo/razão, arrastar/reordenar cenas, dividir/excluir, zoom, exportação JSON e autosave. Sem Supabase, o estado de projeto fica no navegador (`localStorage`); Sound FX remoto não é simulado. Com Supabase e migrações aplicadas, o CRUD remoto e os endpoints Sound FX usam sessão/RLS; a timeline faz playback sincronizado no navegador. O preview visual continua ilustrativo, não vídeo renderizado. O agente/LLM ainda não está conectado; `/api/agent/tools/search_sound_effects` e o RPC `add_sound_effect_to_scene` são contratos de domínio. A inserção atual ocorre pelo botão explícito da biblioteca; ainda não há recomendações geradas, justificativa de posicionamento nem fluxo de confirmação mediado por um modelo. Mercado Pago, OAuth Drive, histórico remoto, worker Chromium/FFmpeg e render final com mixagem seguem pendentes. As migrations e políticas não foram executadas em banco real nesta sessão.
+A fundação UI oferece edição de cenas/personagens, preview ilustrativo com controle de tempo/razão, arrastar/reordenar cenas, dividir/excluir, zoom, exportação JSON e autosave. Sem Supabase, o estado de projeto fica no navegador (`localStorage`); Sound FX remoto não é simulado. Com Supabase e migrações aplicadas, o CRUD remoto e os endpoints Sound FX usam sessão/RLS; a timeline faz playback sincronizado no navegador. O preview visual continua ilustrativo, não vídeo renderizado. O agente/LLM está conectado por `/api/agent/generate` (provedor ativo em `/admin/ai`, prompt em `lib/motion-skill.ts`) e responde apenas com texto; `/api/agent/tools/search_sound_effects` e o RPC `add_sound_effect_to_scene` continuam sendo contratos de domínio que o agente ainda não chama sozinho. A inserção atual ocorre pelo botão explícito da biblioteca; ainda não há recomendações geradas, justificativa de posicionamento nem fluxo de confirmação mediado por um modelo. Mercado Pago, OAuth Drive, histórico remoto, worker Chromium/FFmpeg e render final com mixagem seguem pendentes. As migrations e políticas não foram executadas em banco real nesta sessão.
 
 ## Cronograma técnico por fase
 

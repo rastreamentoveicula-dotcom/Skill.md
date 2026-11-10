@@ -1,3 +1,5 @@
+import { easeSine, overshoot, sceneExit, wordReveal } from './motion-easing';
+
 export type BrowserRenderScene = { title: string; description: string; duration: number; color: string };
 export type BrowserRenderAudio = {
   id: string;
@@ -34,6 +36,35 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number,
   return lines;
 }
 
+// Escadinha da skill de motion: palavra por palavra, entrando de baixo com blur → nítido.
+// Depois de pousar o texto não se mexe. `ctx.filter` não existe em alguns navegadores (ex.: Safari);
+// nesses o blur é simplesmente ignorado e a animação continua funcionando.
+function drawWords(ctx: CanvasRenderingContext2D, lines: string[], centerX: number, baseY: number, lineHeight: number, local: number, scale: number, firstIndex = 0) {
+  const space = ctx.measureText(' ').width;
+  const baseAlpha = ctx.globalAlpha;
+  const previousAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  let index = firstIndex;
+  lines.forEach((line, lineIndex) => {
+    const words = line.split(' ').filter(Boolean);
+    const widths = words.map(word => ctx.measureText(word).width);
+    let x = centerX - (widths.reduce((sum, w) => sum + w, 0) + space * Math.max(0, words.length - 1)) / 2;
+    words.forEach((word, wordIndex) => {
+      const reveal = wordReveal(local, index++, { dy: 40 * scale, blur: 10 * scale });
+      if (reveal.opacity > 0.003) {
+        ctx.globalAlpha = baseAlpha * reveal.opacity;
+        ctx.filter = reveal.blur > 0.3 ? `blur(${reveal.blur.toFixed(1)}px)` : 'none';
+        ctx.fillText(word, x, baseY + lineIndex * lineHeight + reveal.offsetY);
+      }
+      x += widths[wordIndex] + space;
+    });
+  });
+  ctx.filter = 'none';
+  ctx.globalAlpha = baseAlpha;
+  ctx.textAlign = previousAlign;
+  return index;
+}
+
 function drawFrame(ctx: CanvasRenderingContext2D, width: number, height: number, scenes: BrowserRenderScene[], elapsed: number, total: number) {
   let sceneStart = 0;
   let index = scenes.length - 1;
@@ -64,7 +95,7 @@ function drawFrame(ctx: CanvasRenderingContext2D, width: number, height: number,
   }
   const orb = ctx.createRadialGradient(-orbRadius * 0.3, -orbRadius * 0.35, orbRadius * 0.04, 0, 0, orbRadius * 1.2);
   orb.addColorStop(0, '#fff9ff'); orb.addColorStop(0.18, '#e8d3ff'); orb.addColorStop(0.57, color); orb.addColorStop(1, '#181320');
-  ctx.shadowColor = color; ctx.shadowBlur = orbRadius * 0.9; ctx.fillStyle = orb; ctx.beginPath(); ctx.arc(0, 0, orbRadius * (0.92 + Math.sin(progress * Math.PI * 2) * 0.025), 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = color; ctx.shadowBlur = orbRadius * 0.9; ctx.fillStyle = orb; ctx.beginPath(); ctx.arc(0, 0, orbRadius * (0.92 + Math.sin(progress * Math.PI * 2) * 0.025) * (0.6 + 0.4 * overshoot(local / 0.6)), 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
   const copyY = height * 0.72;
@@ -74,10 +105,14 @@ function drawFrame(ctx: CanvasRenderingContext2D, width: number, height: number,
   ctx.fillText('REIMAGINE O POSSÍVEL', centerX, copyY - 45 * scale);
   ctx.fillStyle = '#fffaff'; ctx.font = `700 ${Math.max(28, Math.round(52 * scale))}px Arial, sans-serif`;
   const titleLines = wrapText(ctx, scene.title, maxWidth, 2);
-  titleLines.forEach((line, i) => ctx.fillText(line, centerX, copyY + i * 60 * scale));
+  const exit = index < scenes.length - 1 ? sceneExit(local, scene.duration) : 1;
+  ctx.save(); ctx.globalAlpha = exit;
+  const wordsDrawn = drawWords(ctx, titleLines, centerX, copyY, 60 * scale, local, scale);
   ctx.fillStyle = '#e0d7e8'; ctx.font = `${Math.max(13, Math.round(19 * scale))}px Arial, sans-serif`;
   const descriptionLines = wrapText(ctx, scene.description, maxWidth, 3);
+  ctx.globalAlpha = exit * easeSine((local - (0.12 + wordsDrawn * 0.08 + 0.2)) / 0.5);
   descriptionLines.forEach((line, i) => ctx.fillText(line, centerX, copyY + (titleLines.length - 1) * 60 * scale + 42 * scale + i * 26 * scale));
+  ctx.restore();
 
   ctx.textAlign = 'left'; ctx.fillStyle = '#d2c4e1'; ctx.font = `600 ${Math.max(10, Math.round(12 * scale))}px Arial, sans-serif`;
   ctx.fillText('RECRIAR', width * 0.055, height * 0.93);
