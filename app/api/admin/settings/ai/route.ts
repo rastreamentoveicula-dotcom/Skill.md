@@ -52,6 +52,12 @@ function safeError(error: unknown) {
     const code = String(error.code);
     if (code === '42P01' || code === '42703') return { code: 'vault_schema_not_ready', message: 'A migration do módulo de IA ainda não foi aplicada no Supabase. Revise e aplique a migration antes de configurar provedores.' };
     if (code === '42501') return { code: 'vault_permissions_error', message: 'Permissões insuficientes no Supabase. Confirme que a migration do módulo de IA (ai_vault_rpc) foi aplicada.' };
+    if (code === '401' || code === 'PGRST116') return { code: 'vault_credentials_rejected', message: 'A SUPABASE_SERVICE_ROLE_KEY configurada na Vercel não foi aceita pelo Supabase. Abra o Supabase → Settings → API → service_role, copie a chave e atualize a variável na Vercel; depois faça um novo deploy.' };
+    if (code === 'PGRST202' || code === 'PGRST205') return { code: 'vault_schema_not_ready', message: 'O Supabase ainda não reconhece as funções do módulo de IA. Aguarde um minuto ou reaplique a migration ai_vault_rpc.' };
+    return { code: 'internal_configuration_error', message: `Falha interna ao acessar a configuração segura de IA (código ${code}).` };
+  }
+  if (error instanceof Error && /invalid api key|failed to fetch|jwt/i.test(error.message)) {
+    return { code: 'vault_credentials_rejected', message: 'A conexão do servidor com o Supabase foi recusada. Confira a SUPABASE_SERVICE_ROLE_KEY na Vercel e faça um novo deploy.' };
   }
   return { code: 'internal_configuration_error', message: 'Falha interna ao acessar a configuração segura de IA.' };
 }
