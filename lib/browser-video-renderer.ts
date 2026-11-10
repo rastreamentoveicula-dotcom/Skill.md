@@ -1,6 +1,9 @@
 import { easeSine, overshoot, sceneExit, wordReveal } from './motion-easing';
+import { drawSceneBackground, drawSceneElements, preloadSceneImages } from './motion-composer';
+import type { SceneElement } from './types';
 
-export type BrowserRenderScene = { title: string; description: string; duration: number; color: string };
+export type BrowserRenderScene = { title: string; description: string; duration: number; color: string; image?: string | null; elements?: SceneElement[] };
+type ImageMap = Map<string, CanvasImageSource & { width: number; height: number }>;
 export type BrowserRenderAudio = {
   id: string;
   startTime: number;
@@ -65,7 +68,7 @@ function drawWords(ctx: CanvasRenderingContext2D, lines: string[], centerX: numb
   return index;
 }
 
-function drawFrame(ctx: CanvasRenderingContext2D, width: number, height: number, scenes: BrowserRenderScene[], elapsed: number, total: number) {
+function drawFrame(ctx: CanvasRenderingContext2D, width: number, height: number, scenes: BrowserRenderScene[], elapsed: number, total: number, images: ImageMap) {
   let sceneStart = 0;
   let index = scenes.length - 1;
   for (let i = 0; i < scenes.length; i++) {
@@ -97,6 +100,10 @@ function drawFrame(ctx: CanvasRenderingContext2D, width: number, height: number,
   orb.addColorStop(0, '#fff9ff'); orb.addColorStop(0.18, '#e8d3ff'); orb.addColorStop(0.57, color); orb.addColorStop(1, '#181320');
   ctx.shadowColor = color; ctx.shadowBlur = orbRadius * 0.9; ctx.fillStyle = orb; ctx.beginPath(); ctx.arc(0, 0, orbRadius * (0.92 + Math.sin(progress * Math.PI * 2) * 0.025) * (0.6 + 0.4 * overshoot(local / 0.6)), 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+
+  // Fundo com imagem (Ken Burns) + elementos da Biblioteca de Elementos.
+  drawSceneBackground(ctx, scene, width, height, local, images);
+  drawSceneElements(ctx, scene, width, height, local, images);
 
   const copyY = height * 0.72;
   const maxWidth = width * 0.78;
@@ -180,6 +187,7 @@ export async function renderMotionWebM(
     }
   }
 
+  const images = await preloadSceneImages(scenes);
   const recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 6_000_000 });
   const chunks: BlobPart[] = [];
   const stopped = new Promise<Blob>((resolve, reject) => {
@@ -191,7 +199,7 @@ export async function renderMotionWebM(
   const startedAt = performance.now();
   const frame = () => {
     const elapsed = Math.min(total, (performance.now() - startedAt) / 1000);
-    drawFrame(context, width, height, scenes, elapsed, total);
+    drawFrame(context, width, height, scenes, elapsed, total, images);
     onProgress(Math.min(99, Math.floor((elapsed / total) * 100)));
     if (elapsed < total) requestAnimationFrame(frame);
     else {
@@ -199,7 +207,7 @@ export async function renderMotionWebM(
       window.setTimeout(() => recorder.state !== 'inactive' && recorder.stop(), 150);
     }
   };
-  drawFrame(context, width, height, scenes, 0, total);
+  drawFrame(context, width, height, scenes, 0, total, images);
   requestAnimationFrame(frame);
   try {
     const blob = await stopped;
