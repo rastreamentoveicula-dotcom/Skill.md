@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from '@/lib/supabase-server';
 import { createSupabaseAdminClient } from '@/lib/supabase-admin';
 import { routeAIRequest, aiRouterErrorMessage } from '@/lib/ai-provider-router';
 import { AIProviderError } from '@/lib/ai-providers';
+import { MOTION_AGENT_SYSTEM_PROMPT } from '@/lib/motion-skill';
+import { PayloadTooLargeError, readJsonLimited } from '@/lib/read-json';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,7 +29,13 @@ export async function POST(request: Request) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) return NextResponse.json({ error: 'Entre na sua conta para usar o agente.' }, { status: 401 });
     ownerId = user.id;
-    const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+    let rawBody: unknown = null;
+    try {
+      rawBody = await readJsonLimited(request, 400_000);
+    } catch (bodyError) {
+      if (bodyError instanceof PayloadTooLargeError) return NextResponse.json({ error: 'Pedido grande demais. Reduza o texto ou o projeto.' }, { status: 413 });
+    }
+    const parsed = requestSchema.safeParse(rawBody);
     if (!parsed.success) return NextResponse.json({ error: 'Pedido inválido. Reduza o texto ou revise o projeto.' }, { status: 400 });
 
     const admin = createSupabaseAdminClient();
@@ -40,7 +48,7 @@ export async function POST(request: Request) {
     const context = `Projeto: ${project.name}\nProporção: ${project.aspect}\nCenas atuais: ${JSON.stringify(project.scenes)}\nPersonagens: ${JSON.stringify(project.characters)}\n\nPedido: ${prompt}`;
     const result = await routeAIRequest({
       task: 'script_generation',
-      system: 'Você é o copiloto criativo do Recriar Motion AI. Responda em português brasileiro, de forma prática e concisa. Ajude com roteiro audiovisual, direção visual, ritmo, enquadramento e movimentos de câmera. Não afirme que gerou imagens ou vídeos; entregue instruções textuais claras.',
+      system: MOTION_AGENT_SYSTEM_PROMPT,
       prompt: context,
     });
     await admin.from('ai_usage_logs').insert({ owner_id: user.id, provider: result.provider, model: result.model, task: 'creative_assistant', input_tokens: Number(result.usage?.promptTokenCount ?? result.usage?.input_tokens ?? 0), output_tokens: Number(result.usage?.candidatesTokenCount ?? result.usage?.output_tokens ?? 0), cost_micros: 0, status: 'success' });

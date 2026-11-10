@@ -2,7 +2,7 @@
 
 ## Chave de criptografia
 
-O servidor criptografa API keys de IA e tokens de pagamento com AES-256-GCM antes de gravá-los em `system_settings`. Gere uma chave mestra exclusiva de 32 bytes, codificada em Base64:
+O servidor criptografa o token do Mercado Pago com AES-256-GCM antes de gravá-lo em `system_settings`. As API keys dos provedores de IA **não** usam esta chave: ficam no Supabase Vault (cadastradas em `/admin/ai`). Gere uma chave mestra exclusiva de 32 bytes, codificada em Base64:
 
 ```sh
 openssl rand -base64 32

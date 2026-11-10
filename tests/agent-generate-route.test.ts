@@ -91,6 +91,24 @@ describe('POST /api/agent/generate', () => {
     expect(response.status).toBe(400);
   });
 
+  it('recusa corpo grande demais com 413', async () => {
+    const response = await post({ ...validBody, prompt: 'a'.repeat(500_000) });
+    expect(response.status).toBe(413);
+    expect(vi.mocked(routeAIRequest)).not.toHaveBeenCalled();
+  });
+
+  it('recusa JSON malformado com 400', async () => {
+    const response = await POST(new Request('http://localhost/api/agent/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nao-e-json' }));
+    expect(response.status).toBe(400);
+  });
+
+  it('envia ao provedor o prompt de sistema baseado na skill de motion', async () => {
+    await post(validBody);
+    const call = vi.mocked(routeAIRequest).mock.calls[0][0];
+    expect(call.system).toContain('overshoot');
+    expect(call.system).toContain('português brasileiro');
+  });
+
   it('limita 20 chamadas de IA por hora por usuário', async () => {
     setAdmin(20);
     const response = await post(validBody);
