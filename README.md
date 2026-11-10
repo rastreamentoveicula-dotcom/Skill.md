@@ -1,12 +1,12 @@
 # Recriar Motion AI
 
-Plataforma audiovisual em evolução. Esta branch contém a fundação Next.js/Supabase, o Motion Studio, painel administrativo protegido em `/admin`, módulo Sound FX e exportação de vídeo WebM no navegador com cenas e áudio da timeline. O agente criativo usa Gemini quando `GEMINI_API_KEY` está configurada como segredo do servidor. Recursos remotos dependem de Supabase; render MP4, Mercado Pago e sincronização OAuth com Google Drive permanecem pendentes.
+Plataforma audiovisual em evolução. Esta branch contém a fundação Next.js/Supabase, o Motion Studio, painel administrativo protegido em `/admin`, módulo Sound FX e exportação de vídeo WebM no navegador com cenas e áudio da timeline. O agente criativo usa o provedor configurado em `/admin/ai` (Gemini, OpenAI, Anthropic ou OpenRouter), com credenciais guardadas no Supabase Vault. Recursos remotos dependem de Supabase; render MP4, Mercado Pago e sincronização OAuth com Google Drive permanecem pendentes.
 
 ## Requisitos
 
 - Node.js 20+ e npm.
 - Supabase para autenticação, Postgres e Storage.
-- Gemini opcional para o agente criativo; configurar `GEMINI_API_KEY` como segredo de servidor.
+- Provedor de IA configurado em `/admin/ai` (Gemini, OpenAI, Anthropic ou OpenRouter) para o agente criativo; a credencial é guardada no Supabase Vault pelo painel.
 - Worker Node em contêiner com Chromium/Playwright e FFmpeg continua necessário para exportar MP4; a exportação atual no navegador entrega WebM.
 
 ## Executar localmente

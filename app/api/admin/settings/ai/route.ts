@@ -43,7 +43,7 @@ function safeError(error: unknown) {
   if (error instanceof AIProviderError) return { code: error.code, message: error.message };
   if (error instanceof CredentialStoreError) return { code: error.code, message: error.message };
   if (error instanceof Error && error.message === 'VAULT_DATABASE_NOT_CONFIGURED') {
-    return { code: 'vault_not_configured', message: 'Configure SUPABASE_DB_URL como segredo de servidor na Vercel para o acesso privado ao Supabase Vault.' };
+    return { code: 'vault_not_configured', message: 'Configure SUPABASE_SERVICE_ROLE_KEY como segredo de servidor para o acesso ao Supabase Vault.' };
   }
   if (error instanceof Error && error.message === 'VAULT_SECRET_NOT_FOUND') {
     return { code: 'vault_secret_not_found', message: 'Credencial não encontrada no Supabase Vault. Cadastre-a novamente.' };
@@ -51,7 +51,7 @@ function safeError(error: unknown) {
   if (error && typeof error === 'object' && 'code' in error) {
     const code = String(error.code);
     if (code === '42P01' || code === '42703') return { code: 'vault_schema_not_ready', message: 'A migration do módulo de IA ainda não foi aplicada no Supabase. Revise e aplique a migration antes de configurar provedores.' };
-    if (code === '42501') return { code: 'vault_permissions_error', message: 'A conexão privada do servidor não tem as permissões necessárias para ler o Vault.' };
+    if (code === '42501') return { code: 'vault_permissions_error', message: 'Permissões insuficientes no Supabase. Confirme que a migration do módulo de IA (ai_vault_rpc) foi aplicada.' };
   }
   return { code: 'internal_configuration_error', message: 'Falha interna ao acessar a configuração segura de IA.' };
 }
