@@ -9,3 +9,8 @@ coverage/
 *.mp4
 *.wav
 frames/
+
+# Testes e cobertura
+coverage/
+test-results/
+playwright-report/
