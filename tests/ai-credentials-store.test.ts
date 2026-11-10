@@ -28,7 +28,7 @@ function selectEqMaybeSingle(payload: QueryResult) {
   return { select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve(payload) }) }) };
 }
 function selectActiveChain(payload: QueryResult) {
-  return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ limit: () => ({ maybeSingle: () => Promise.resolve(payload) }) }) }) }) }) }) };
+  return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ limit: () => ({ maybeSingle: () => Promise.resolve(payload) }) }) }) }) }) };
 }
 
 beforeEach(() => {
@@ -151,5 +151,19 @@ describe('getActiveProviderConfig', () => {
   it('exige credencial no Vault para o provedor ativo', async () => {
     fromMock.mockReturnValue(selectActiveChain({ data: { id: 'c1', provider: 'gemini', model: 'm1', task: 'conversation', vault_secret_id: null }, error: null }));
     await expect(getActiveProviderConfig('conversation')).rejects.toMatchObject({ code: 'credential_missing' });
+  });
+
+  it('não bloqueia por connection_status antigo (ex.: falha de teste com modelo trocado)', async () => {
+    const eqArgs: unknown[][] = [];
+    const step: Record<string, (...args: unknown[]) => unknown> = {
+      eq: (...args: unknown[]) => { eqArgs.push(args); return step; },
+      limit: () => step,
+      maybeSingle: () => Promise.resolve({ data: { id: 'c1', provider: 'gemini', model: 'gemini-3.6-flash', task: 'script_generation', vault_secret_id: 'v1' }, error: null }),
+    };
+    fromMock.mockReturnValue({ select: () => step });
+    rpcMock.mockResolvedValue({ data: 'sk-live', error: null });
+    const config = await getActiveProviderConfig('script_generation');
+    expect(config.model).toBe('gemini-3.6-flash');
+    expect(eqArgs.some(([field]) => field === 'connection_status')).toBe(false);
   });
 });

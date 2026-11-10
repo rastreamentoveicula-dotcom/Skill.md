@@ -149,7 +149,9 @@ export async function setProviderConfigState(input: { id: string; actorId: strin
 }
 
 export async function getActiveProviderConfig(task: AITask) {
-  const query = () => db().from('ai_provider_configs').select('id, provider, model, task, vault_secret_id').eq('enabled', true).eq('is_default', true).eq('connection_status', 'connected');
+  // connection_status é um indicador de saúde (mostrado no painel), não um bloqueio:
+  // um teste antigo com falha não pode derrubar o agente para sempre.
+  const query = () => db().from('ai_provider_configs').select('id, provider, model, task, vault_secret_id').eq('enabled', true).eq('is_default', true);
   let { data: row, error } = await query().eq('task', task).limit(1).maybeSingle();
   if (error) rethrowDb(error);
   if (!row && task !== 'conversation') {

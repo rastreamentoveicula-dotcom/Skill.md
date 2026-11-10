@@ -27,6 +27,18 @@ const validBody = {
   },
 };
 
+// Formato EXATO enviado por components/MotionStudio.tsx (sendChat): cenas e
+// personagens carregam id, cor e demais campos internos do Studio.
+const realAppBody = {
+  prompt: 'Um vídeo de 3 cenas sobre meu app de rastreamento de veículos',
+  project: {
+    name: 'Novo projeto',
+    aspect: '16:9',
+    scenes: [{ id: 'e6c2a1d4-0000-4000-8000-000000000001', title: 'Cena 1', duration: 4, description: 'Descreva a ação e o movimento desta cena.', color: '#6548bb' }],
+    characters: [{ id: 'e6c2a1d4-0000-4000-8000-000000000002', name: 'Felipe', role: 'Novo personagem', description: '', personality: '', color: '#a78bfa' }],
+  },
+};
+
 function post(body: unknown) {
   return POST(new Request('http://localhost/api/agent/generate', {
     method: 'POST',
@@ -94,6 +106,19 @@ describe('POST /api/agent/generate', () => {
     expect(body.text).toBe('Roteiro pronto');
     expect(body.provider).toBe('gemini');
     expect(usageInserts[0]).toMatchObject({ owner_id: 'user-1', status: 'success', task: 'creative_assistant' });
+  });
+
+  it('aceita o formato exato enviado pelo app (cenas e personagens com id e cor)', async () => {
+    const response = await post(realAppBody);
+    expect(response.status).toBe(200);
+    const body = await asJson(response);
+    expect(body.text).toBe('Roteiro pronto');
+    expect(vi.mocked(routeAIRequest)).toHaveBeenCalledOnce();
+  });
+
+  it('continua recusando pedidos genuinamente inválidos mesmo sem strict', async () => {
+    expect((await post({ prompt: 'ok', project: { name: 'x', aspect: '16:9', scenes: [{ title: 't', description: 'd', duration: 9999 }], characters: [] } })).status).toBe(400);
+    expect((await post({ prompt: 'ok', project: { name: 'x', aspect: '16:9', scenes: [{ title: 't', description: 'd', duration: 4 }], characters: [{ name: 'n', role: 'r', description: 'd', personality: 'p', unknownNested: { a: 1 } }] } })).status).toBe(200);
   });
 
   it('devolve 504 em timeout do provedor e registra erro', async () => {

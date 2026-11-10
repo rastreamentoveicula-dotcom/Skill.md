@@ -8,15 +8,17 @@ import { AIProviderError } from '@/lib/ai-providers';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Aceita o formato real do Studio (cenas e personagens carregam id, cor e outros
+// campos internos). Campos desconhecidos são ignorados; os limites continuam valendo.
 const requestSchema = z.object({
   prompt: z.string().trim().min(2).max(4000),
   project: z.object({
     name: z.string().max(160).default('Projeto sem título'),
     aspect: z.string().max(8).default('16:9'),
-    scenes: z.array(z.object({ title: z.string().max(160), description: z.string().max(2000), duration: z.number().min(0).max(600) }).strict()).max(40),
-    characters: z.array(z.object({ name: z.string().max(120), role: z.string().max(180), description: z.string().max(1200), personality: z.string().max(1200) }).strict()).max(40).default([]),
-  }).strict(),
-}).strict();
+    scenes: z.array(z.object({ title: z.string().max(160), description: z.string().max(2000), duration: z.number().min(0).max(600) })).max(40),
+    characters: z.array(z.object({ name: z.string().max(120), role: z.string().max(180), description: z.string().max(1200), personality: z.string().max(1200) })).max(40).default([]),
+  }),
+});
 
 export async function POST(request: Request) {
   let ownerId: string | null = null;
