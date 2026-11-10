@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: typecheck + lint + testes + build + audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Testes com coverage (com metas por módulo)
+        run: npm run test:ci
+      - name: Publicar relatório de coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+      - name: Build de produção
+        run: npm run build
+      - name: Auditoria de dependências
+        run: npm audit --audit-level=high
+
+  e2e:
+    name: e2e de navegador (desktop + mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: gate
+    continue-on-error: true # informativo: não bloqueia o merge em caso de instabilidade do browser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Instalar browsers do Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Rodar e2e
+        run: npm run e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+      - name: Upload dos traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
+  smoke:
+    name: smoke de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verificar endpoints públicos de produção
+        run: node scripts/smoke-production.mjs
+        env:
+          SMOKE_BASE_URL: https://motion-system-eta.vercel.app
